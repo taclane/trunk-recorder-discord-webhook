@@ -69,7 +69,7 @@ public:
     CURL *curl = nullptr;
     struct curl_slist *header_list = nullptr;
 
-    BOOST_LOG_TRIVIAL(warning) << "[Discord Webhook JSON] " << webhook_json.str();
+    BOOST_LOG_TRIVIAL(debug) << "[Discord Webhook JSON] " << webhook_json.str();
 
     std::string webhook_str = webhook_json.str();
 
@@ -93,7 +93,7 @@ public:
       curl_easy_cleanup(curl);
     }
 
-    hook->rate_bucket = "what?";
+    //hook->rate_bucket = "what?";
 
     return 0;
   }
@@ -118,8 +118,6 @@ public:
       {
         Webhook *hook = &(*it);
 
-        BOOST_LOG_TRIVIAL(error) << " reatelog!";
-
         boost::property_tree::ptree webhook_data;
         boost::property_tree::ptree embed, embeds_array;
         boost::property_tree::ptree field, fields_array;
@@ -137,7 +135,6 @@ public:
         embed.put("author.icon_url", hook->avatar_url);
         embed.put("footer.text", footer_text);
 
-
         for (std::vector<System *>::iterator it = systems.begin(); it != systems.end(); ++it)
         {
           System *system = *it;
@@ -148,7 +145,6 @@ public:
           if (sys_type.find("conventional") == std::string::npos)
           {
             boost::property_tree::ptree stat_node = system->get_stats_current(timeDiff);
-            // boost::property_tree::ptree system_node;
 
             field.put("name", stat_node.get<std::string>("id") + ". " + system->get_short_name());
             field.put("value", round_to_str(stat_node.get<double>("decoderate")));
@@ -156,13 +152,6 @@ public:
             fields_array.push_back(make_pair("", field));
             field.clear();
        
-
-            // system_node.put("sys_num", stat_node.get<std::string>("id"));
-            // system_node.put("sys_name", system->get_short_name());
-            // system_node.put("decoderate", round_to_str(stat_node.get<double>("decoderate")));
-            // system_node.put("decoderate_interval", timeDiff);
-            // system_node.put("control_channel", system->get_current_control_channel());
-            // systems_node.push_back(std::make_pair("", system_node));
           }
         }
 
