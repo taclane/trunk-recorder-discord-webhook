@@ -1,0 +1,61 @@
+{
+  "ver": 2,
+  "instance_id": "city_center",
+  "sources": [
+    {
+      "center": 855700000,
+      "rate": 2048000,
+      "error": -300,
+      "gain": 42,
+      "digitalRecorders": 4,
+      "driver": "osmosdr"
+    }
+  ],
+  "systems": [
+    {
+      "control_channels": [855462500],
+      "type": "p25",
+      "shortName": "PD",
+      "modulation": "qpsk"
+    },
+    {
+      "control_channels": [856462500],
+      "type": "p25",
+      "shortName": "county",
+      "modulation": "qpsk"
+    }
+  ],
+  "plugins": [
+    {
+      "name": "discord_webhook",
+      "library": "libdiscord_webhook_plugin.so",
+      "enabled": true,
+      "webhooks": [
+        {
+          "description": "PD to #all-responders",
+          "event": "call",
+          "shortName": "PD",
+          "webhook": "https://discord.com/api/webhooks/1125411831159201847/KVjwJ7xSvdU7gH_PQnLeTCqJ5h7mBMyHVcuQrNu3BLHvDnsGMY5eaaYSKGwDZBTrpA4i"
+        },
+        {
+          "description": "PD to #just-PD",
+          "event": "call",
+          "shortName": "PD",
+          "color": 255,
+          "webhook": "https://discord.com/api/webhooks/1126190143980679768/nsyTAw8E50ZMBzEQ6_dtpgzOzfJDocQMNPKYPFji2IAGSHMovO7mjeJDi9QEIYcCSwt4"
+        },
+        {
+          "event": "call",
+          "shortName": "county",
+          "webhook": "https://discord.com/api/webhooks/1126190471480388862/xhK4Yn5-cgTGbkUYvxu7kIn0SlGxyOmssraUVrPWsBPqr2okomR3roUQRHZ21vjP3oGR"
+        },
+        {
+          "description": "rates to #tr-status",
+          "enabled": false,
+          "event": "rate",
+          "webhook": "https://discord.com/api/webhooks/1125411831159201847/KVjwJ7xSvdU7gH_PQnLeTCqJ5h7mBMyHVcuQrNu3BLHvDnsGMY5eaaYSKGwDZBTrpA4i"
+        }
+      ]
+    }
+  ]
+}
