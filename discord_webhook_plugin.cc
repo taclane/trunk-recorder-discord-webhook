@@ -88,7 +88,7 @@ public:
 
       long code;
       curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
-      BOOST_LOG_TRIVIAL(warning) << "curl: " << code << " " << curl_easy_strerror(curl_ret);
+      BOOST_LOG_TRIVIAL(debug) << "curl: " << code << " " << curl_easy_strerror(curl_ret);
 
       curl_easy_cleanup(curl);
     }
