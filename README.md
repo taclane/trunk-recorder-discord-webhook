@@ -34,22 +34,30 @@ Webhooks do not need to be unique per-system.  The plugin will attempt send the 
 ## Configure
 
 **Webhooks Object:**
-| Key         | Required | Default Value  | Type       | Description                                  |
-| ----------- | :------: | :------------: | ---------- | -------------------------------------------- |
-| description |          |                | string     | Descriptor field to identify the entry       |
-| event       |    ✓     |                | string     | Event to trigger webhook                     |
-| shortName   |          |                | string     |                                              |
-| webhook     |    ✓     |                | int        | Webhook URL (redacted in system logs)        |
-| enabled     |          |      true      | true/false | Disable/enable individual webhooks if needed |
-| username    |          | Trunk Recorder | string     | Username to publish the webhook message      |
-| avatar      |          |  (T-R Radio)   | string     | Avatar URL                                   |
-| color       |          |     (red)      | int        | Integer color code                           |
+| Key         | Required? | Default Value  | Type       | Description                                                      |
+| ----------- | :-------: | :------------: | ---------- | ---------------------------------------------------------------- |
+| description |           |                | string     | Descriptor field to identify the entry                           |
+| event       |     ✓     |                | string     | Trunk-recorder event to monitor                                  |
+| selector    |           |                | string     | Optional selectors for webhook (see below)                       |
+| webhook     |     ✓     |                | int        | Webhook URL (redacted in system logs)                            |
+| message     |           |                | string     | Optional text to display in the webhook                          |
+| content     |           |                | string     | Optional text to display *above* the webhook; can use pings here |
+| enabled     |           |      true      | true/false | Disable/enable individual webhooks if needed                     |
+| username    |           | Trunk Recorder | string     | Username to publish the webhook message                          |
+| avatar      |           |  (T-R Radio)   | string     | Avatar URL                                                       |
+| color       |           |     (red)      | int        | Integer color code for message embeds                            |
 
 **Events:**
-| Event | Requirement | Description                              |
-| ----- | ----------- | ---------------------------------------- |
-| call  | shortName   | Completed call on system `shortName`     |
-| rates |             | Message decode rates for digital systems |
+| Event | Selector    | Selector Required? | Default     | Description                              |
+| ----- | ----------- | ------------------ | ----------- | ---------------------------------------- |
+| call  | `shortName` |                    | All Systems | Completed calls                          |
+| rates | `shortName` |                    | All Systems | Message decode rates for digital systems |
+
+Optional ping usage:
+```
+"content": "Ping @everone, user <@12345678>, and role group <@$23456789>",
+```
+Right-click on a user or a role and "Get ID" for the above id numbers.
 
 **Plugin Usage:**
 
@@ -61,19 +69,19 @@ See the included [config.json](./config.json) for an example how to load this pl
 "enabled": true,
 "webhooks": [
     {
-        "description": "PD to #all-responders",
+        "description": "county to #all-responders",
         "event": "call",
-        "shortName": "PD",
+        "selector": "county",
         "webhook": "https://discord.com/api/webhooks/1125411831159201847/KVjwJ7xSvdU7gH_PQnLeTCqJ5h7mBMyHVcuQrNu3BLHvDnsGMY5eaaYSKGwDZBTrpA4i"
     },{
         "description": "PD to #just-PD",
         "event": "call", 
-        "shortName": "PD",
+        "selector": "PD",
         "color": 255,
         "webhook": "https://discord.com/api/webhooks/1126190143980679768/nsyTAw8E50ZMBzEQ6_dtpgzOzfJDocQMNPKYPFji2IAGSHMovO7mjeJDi9QEIYcCSwt4"
     },{
+        "description": "all calls!",
         "event": "call", 
-        "shortName": "county",
         "webhook": "https://discord.com/api/webhooks/1126190471480388862/xhK4Yn5-cgTGbkUYvxu7kIn0SlGxyOmssraUVrPWsBPqr2okomR3roUQRHZ21vjP3oGR"
     },{
         "description": "rates to #tr-status",
