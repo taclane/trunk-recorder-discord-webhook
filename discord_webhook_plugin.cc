@@ -52,7 +52,8 @@ class Discord_Webhook : public Plugin_Api
 {
   std::vector<Webhook> system_webhooks;
   std::vector<Webhook> status_webhooks;
-  //std::map<std::string, RateBucket> rate_buckets;
+  std::string log_prefix;
+  // std::map<std::string, RateBucket> rate_buckets;
 
 public:
   // ********************************
@@ -234,26 +235,24 @@ public:
     std::string default_username = "Trunk Recorder";
     std::string default_avatar_url = "https://cdn.discordapp.com/icons/928800455444791306/78e52a70389e4a5589b6d22001ccce45.png";
     int default_color = 0xff0000; // red
-
+    int hook_count = 0;
+    this->log_prefix = "\t[Discord Hook]\t";
+    
     // Get the configured systems and webhook URLs
     BOOST_FOREACH (boost::property_tree::ptree::value_type &node, cfg.get_child("webhooks"))
     {
-
       bool enabled = node.second.get<bool>("enabled", true);
       boost::optional<boost::property_tree::ptree &> webhook_entry = node.second.get_child_optional("event");
-      int hook_count = 0;
 
       if ((webhook_entry) && (enabled))
       {
-
         Webhook hook;
         hook_count += 1;
-        std::string hook_desc = "[" + std::to_string(hook_count) + "]";
 
         hook.event = node.second.get<std::string>("event", "");
         hook.selector = node.second.get<std::string>("selector", "");
         hook.webhook_url = node.second.get<std::string>("webhook", "");
-        hook.description = node.second.get<std::string>("description", hook_desc);
+        hook.description = node.second.get<std::string>("description", "");
         hook.username = node.second.get<std::string>("username", default_username);
         hook.avatar_url = node.second.get<std::string>("avatar", default_avatar_url);
         hook.color = node.second.get<int>("color", default_color);
@@ -263,8 +262,9 @@ public:
         if (regex_match(hook.webhook_url.c_str(), match, url_regex))
         {
           std::string redacted_url(match[1].first, match[1].second);
-          BOOST_LOG_TRIVIAL(info) << " [" << hook.event << "][" << hook.selector << "] \t" << hook.description;
-          BOOST_LOG_TRIVIAL(info) << "  --> " << redacted_url << "/**TOKEN**";
+          BOOST_LOG_TRIVIAL(info) << log_prefix << std::to_string(hook_count) << ": " << hook.description;
+          BOOST_LOG_TRIVIAL(info) << log_prefix << "   Event:  " << hook.event << " = " << (hook.selector.empty() ? "(any)" : hook.selector);
+          BOOST_LOG_TRIVIAL(info) << log_prefix << "   URL:    " << redacted_url << "/******";
 
           if (hook.event == "call")
           {
@@ -277,17 +277,18 @@ public:
         }
         else
         {
-          BOOST_LOG_TRIVIAL(error) << " Unable to parse Discord webhook URL for: [" << hook.event << "][" << hook.selector << "]";
+          BOOST_LOG_TRIVIAL(error) << log_prefix << "Unable to parse Discord webhook URL for: (" << hook.event << " = " << (hook.selector.empty() ? "(any)" : hook.selector) << ")";
         }
       }
     }
 
     if (this->system_webhooks.size() + this->status_webhooks.size() == 0)
     {
-      BOOST_LOG_TRIVIAL(error) << "Discord Webhook Plugin loaded, but no webhooks are configured.";
+      BOOST_LOG_TRIVIAL(error) << log_prefix << "Discord Webhook Plugin loaded, but no webhooks are configured.";
       return 1;
     }
 
+    this->log_prefix = "[Discord Hook]\t";
     return 0;
   }
 
@@ -311,7 +312,7 @@ public:
     CURL *curl = nullptr;
     struct curl_slist *header_list = nullptr;
 
-    BOOST_LOG_TRIVIAL(debug) << "[Discord Webhook JSON] " << webhook_json.str();
+    BOOST_LOG_TRIVIAL(debug) << log_prefix << "JSON: " << webhook_json.str();
 
     std::string webhook_str = webhook_json.str();
 
@@ -334,13 +335,13 @@ public:
       CURLcode curl_ret = curl_easy_perform(curl);
 
       curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &curl_response);
-      BOOST_LOG_TRIVIAL(debug) << "curl: " << curl_response << " " << curl_easy_strerror(curl_ret);
+      BOOST_LOG_TRIVIAL(debug) << log_prefix << "curl: " << curl_response << " " << curl_easy_strerror(curl_ret);
 
       // for (const auto &header : headers)
       // {
       //   std::cout << header.first << ": " << header.second.get_value<std::string>() << std::endl;
       // }
-      // BOOST_LOG_TRIVIAL(debug) << "time " << time(NULL) << " time";
+      // BOOST_LOG_TRIVIAL(debug) << log_prefix << "time " << time(NULL) << " time";
 
       // hook->rate_bucket = headers["x-ratelimit-bucket"];
 
@@ -381,8 +382,7 @@ public:
   // Factory method
   static boost::shared_ptr<Discord_Webhook> create()
   {
-    return boost::shared_ptr<Discord_Webhook>(
-        new Discord_Webhook());
+    return boost::shared_ptr<Discord_Webhook>(new Discord_Webhook());
   }
 };
 
