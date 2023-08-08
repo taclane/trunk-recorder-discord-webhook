@@ -39,7 +39,7 @@ Webhooks do not need to be unique per-system.  The plugin will attempt send the 
 | description |           |                | string     | Descriptor field to identify the entry                           |
 | event       |     ✓     |                | string     | Trunk-recorder event to monitor                                  |
 | selector    |           |                | string     | Optional selectors for webhook (see below)                       |
-| webhook     |     ✓     |                | int        | Webhook URL (redacted in system logs)                            |
+| webhook     |     ✓     |                | string     | Webhook URL (redacted in system logs)                            |
 | message     |           |                | string     | Optional text to display in the webhook                          |
 | content     |           |                | string     | Optional text to display *above* the webhook; can use pings here |
 | enabled     |           |      true      | true/false | Disable/enable individual webhooks if needed                     |
