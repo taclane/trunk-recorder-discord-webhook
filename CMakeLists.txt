@@ -124,7 +124,8 @@ message(STATUS "GnuRadio Version: " ${GNURADIO_VERSION})
 #find_package(LibUHD)
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
-find_library(trunk-recorder NAMES trunk-recorder/libtrunk-recorder.a REQUIRED)
+#find_library(trunk-recorder NAMES trunk-recorder/libtrunk-recorder.a REQUIRED)
+find_library(trunk-recorder NAMES libtrunk-recorder.a REQUIRED)
 
 GET_FILENAME_COMPONENT(TRUNK-RECORDER_LIBRARIES "${trunk-recorder}" PATH)
 
@@ -179,6 +180,8 @@ include_directories(
     ${GNURADIO_OSMOSDR_INCLUDE_DIRS}
     ${CMAKE_BINARY_DIR}/lib
     ${CMAKE_BINARY_DIR}/include
+    ${CMAKE_INSTALL_PREFIX}/include
+    ${CMAKE_INSTALL_PREFIX}/include/trunk-recorder
     ${CMAKE_SOURCE_DIR}/lib/op25_repeater/lib
     ${CMAKE_SOURCE_DIR}/lib/op25_repeater/include
     ${OPENSSL_INCLUDE_DIR}

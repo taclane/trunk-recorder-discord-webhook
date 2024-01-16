@@ -10,6 +10,7 @@
 #include <map>
 
 #include <trunk-recorder/plugin_manager/plugin_api.h>
+#include <trunk-recorder/json.hpp>
 
 #include <boost/dll/alias.hpp> // for BOOST_DLL_ALIAS
 #include <boost/foreach.hpp>
@@ -227,7 +228,8 @@ public:
 
   // parse_config()
   //   TRUNK-RECORDER PLUGIN API: Called before init(); parses the config information for this plugin.
-  int parse_config(boost::property_tree::ptree &cfg)
+  //int parse_config(boost::property_tree::ptree &cfg)
+  int parse_config(nlohmann::json cfg) override
   {
     boost::regex url_regex("(https://discord.com/api/webhooks/[0-9]*)/(.*)?");
     boost::cmatch match;
@@ -239,25 +241,29 @@ public:
     this->log_prefix = "\t[Discord Hook]\t";
     
     // Get the configured systems and webhook URLs
-    BOOST_FOREACH (boost::property_tree::ptree::value_type &node, cfg.get_child("webhooks"))
+    // BOOST_FOREACH (boost::property_tree::ptree::value_type &node, cfg.get_child("webhooks"))
+    // BOOST_FOREACH (auto &node, cfg.value("webhooks",""))
+    for (auto &node : cfg["webhooks"])
     {
-      bool enabled = node.second.get<bool>("enabled", true);
-      boost::optional<boost::property_tree::ptree &> webhook_entry = node.second.get_child_optional("event");
+      bool enabled = node.value("enabled", true);
+      // boost::optional<boost::property_tree::ptree &> webhook_entry = node.second.get_child_optional("event");
+      //nlohmann::json webhook_entry = node.second.get_child_optional("event");
 
-      if ((webhook_entry) && (enabled))
+      // if ((node["event"] =! "") && (node["enabled"]))
+      if (node.value("enabled", true))
       {
         Webhook hook;
         hook_count += 1;
 
-        hook.event = node.second.get<std::string>("event", "");
-        hook.selector = node.second.get<std::string>("selector", "");
-        hook.webhook_url = node.second.get<std::string>("webhook", "");
-        hook.description = node.second.get<std::string>("description", "");
-        hook.username = node.second.get<std::string>("username", default_username);
-        hook.avatar_url = node.second.get<std::string>("avatar", default_avatar_url);
-        hook.color = node.second.get<int>("color", default_color);
-        hook.message = node.second.get<std::string>("message", "");
-        hook.content = node.second.get<std::string>("content", "");
+        hook.event = node.value<std::string>("event", "");
+        hook.selector = node.value<std::string>("selector", "");
+        hook.webhook_url = node.value<std::string>("webhook", "");
+        hook.description = node.value<std::string>("description", "");
+        hook.username = node.value<std::string>("username", default_username);
+        hook.avatar_url = node.value<std::string>("avatar", default_avatar_url);
+        hook.color = node.value<int>("color", default_color);
+        hook.message = node.value<std::string>("message", "");
+        hook.content = node.value<std::string>("content", "");
 
         if (regex_match(hook.webhook_url.c_str(), match, url_regex))
         {
