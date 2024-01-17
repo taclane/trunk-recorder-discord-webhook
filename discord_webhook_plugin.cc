@@ -20,6 +20,9 @@
 
 #include <sys/stat.h>
 
+// D++ LIBRARY MUST BE INCLUDED AFTER TRUNK-RECORDER INCLUDES (json.hpp)
+#include <dpp/dpp.h>
+
 struct Webhook
 {
   std::string description;
@@ -245,7 +248,7 @@ public:
     // BOOST_FOREACH (auto &node, cfg.value("webhooks",""))
     for (auto &node : cfg["webhooks"])
     {
-      bool enabled = node.value("enabled", true);
+      //bool enabled = node.value("enabled", true);
       // boost::optional<boost::property_tree::ptree &> webhook_entry = node.second.get_child_optional("event");
       //nlohmann::json webhook_entry = node.second.get_child_optional("event");
 
@@ -304,6 +307,15 @@ public:
 
   int execute_webhook(boost::property_tree::ptree webhook_data, Webhook *hook)
   {
+    dpp::cluster bot("");
+    bot.on_log(dpp::utility::cout_logger());
+ 
+    /* Construct a webhook object using the URL you got from Discord */
+    dpp::webhook wh(hook->webhook_url);
+ 
+    /* Send a message with this webhook */
+    bot.execute_webhook_sync(wh, dpp::message("Have a great time here :smile:"));
+
     // https://autocode.com/tools/discord/embed-builder/
     // https://discord.com/developers/docs/resources/webhook#execute-webhook
     // https://birdie0.github.io/discord-webhooks-guide/discord_webhook.html
