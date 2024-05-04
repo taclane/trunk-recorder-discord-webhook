@@ -118,13 +118,10 @@ message(STATUS "GnuRadio Version: " ${GNURADIO_VERSION})
 ########################################################################
 # Find build dependencies
 ########################################################################
-#find_package(GnuradioUHD)
-#find_package(GnuradioOsmosdr)
-#find_package(LibHackRF)
-#find_package(LibUHD)
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
-#find_library(trunk-recorder NAMES trunk-recorder/libtrunk-recorder.a REQUIRED)
+find_package(DPP REQUIRED)
+
 find_library(trunk-recorder NAMES libtrunk-recorder.a REQUIRED)
 
 GET_FILENAME_COMPONENT(TRUNK-RECORDER_LIBRARIES "${trunk-recorder}" PATH)
@@ -186,6 +183,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/lib/op25_repeater/include
     ${OPENSSL_INCLUDE_DIR}
     ${CURL_INCLUDE_DIR}
+    ${DPP_LIBRARIES}
     "lib"
 )
 
@@ -194,7 +192,12 @@ link_directories(
     ${OPENSSL_ROOT_DIR}/lib
     ${CMAKE_INSTALL_PREFIX}/lib/trunk-recorder
     ${TRUNK-RECORDER_LIBRARIES}
+    ${DPP_LIBRARIES}
 )
+
+# aux_source_directory("commands" commands)
+# add_executable(${BOT_NAME} ${coresrc} ${commands})
+
 
 set(CMAKE_CXX_FLAGS_DEBUG "-Wall -Wno-unused-local-typedef -Wno-deprecated-declarations -Wno-error=deprecated-declarations -g3")
 
@@ -208,7 +211,12 @@ include_directories("/usr/local/include")
 add_library(discord_webhook_plugin
 MODULE
     discord_webhook_plugin.cc
-)
+    commands/help.cpp
+    commands/ping.cpp
+    commands/info.cpp
+    commands/rates.cpp
+    commands/tg.cpp
+    )
 
 target_link_libraries(discord_webhook_plugin ${trunk-recorder} dpp ssl crypto ${CURL_LIBRARIES} ${Boost_LIBRARIES} ${GNURADIO_PMT_LIBRARIES} ${GNURADIO_RUNTIME_LIBRARIES} ${GNURADIO_FILTER_LIBRARIES} ${GNURADIO_DIGITAL_LIBRARIES} ${GNURADIO_ANALOG_LIBRARIES} ${GNURADIO_AUDIO_LIBRARIES} ${GNURADIO_UHD_LIBRARIES} ${UHD_LIBRARIES} ${GNURADIO_BLOCKS_LIBRARIES} ${GNURADIO_OSMOSDR_LIBRARIES}  ${LIBOP25_REPEATER_LIBRARIES} gnuradio-op25_repeater)
 

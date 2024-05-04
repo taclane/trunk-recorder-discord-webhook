@@ -3,408 +3,306 @@
 // Requires trunk-recorder 4.5 or later
 // ********************************
 
-#include <curl/curl.h>
-#include <time.h>
-#include <iomanip>
-#include <vector>
-#include <map>
+#include "discord_webhook_plugin.h"
 
-#include <trunk-recorder/plugin_manager/plugin_api.h>
-#include <trunk-recorder/json.hpp>
+// ********************************
+// trunk-recorder discord
+// ********************************
 
-#include <boost/dll/alias.hpp> // for BOOST_DLL_ALIAS
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string.hpp>
-
-#include <boost/date_time/posix_time/posix_time.hpp>
-
-#include <sys/stat.h>
-
-// D++ LIBRARY MUST BE INCLUDED AFTER TRUNK-RECORDER INCLUDES (json.hpp)
-#include <dpp/dpp.h>
-
-struct Webhook
+// system_rates()
+// Send control channel messages per second updates;
+// rounded to two decimal places
+int Discord_Bot::system_rates(std::vector<System *> systems, float timeDiff)
 {
-  std::string description;
-  std::string event;
-  std::string selector;
-  std::string webhook_url;
-  std::string rate_bucket;
-  std::string username;
-  std::string avatar_url;
-  std::string message;
-  std::string content;
-  int color;
-};
 
-// struct RateBucket
-// {
-//   int limit;
-//   int remaining;
-//   int reset;
-//   float reset_after;
-//   std::string bucket;
-// };
+  std::map<int, std::string> graph_blocks = {
+      {0, " "},
+      {1, "▁"},
+      {2, "▂"},
+      {3, "▃"},
+      {4, "▄"},
+      {5, "▅"},
+      {6, "▆"},
+      {7, "▇"},
+      {8, "█"}};
 
-// struct WebHooks
-// {
-//   std::vector<Webhook> call;
-//   std::vector<Webhook> rate;
-// };
+  nlohmann::json rates;
 
-class Discord_Webhook : public Plugin_Api
+  for (std::vector<System *>::iterator it = systems.begin(); it != systems.end(); ++it)
+  {
+    System *system = *it;
+    std::string sys_name = system->get_short_name();
+    std::string sys_type = system->get_system_type();
+    std::string sys_id = std::to_string(system->get_sys_num());
+
+    // Filter out conventional systems.  They do not have a call rate and
+    // get_current_control_channel() will cause a sefgault on non-trunked systems.
+    if (sys_type.find("conventional") == std::string::npos)
+    {
+      // Initialize a system history with null entries
+      if (rate_history.find(sys_id) == rate_history.end())
+      {
+        rate_history[sys_id] = std::deque<double>(65, -1);
+      }
+
+      // Update the last rate and history
+      boost::property_tree::ptree stat_node = system->get_stats_current(timeDiff);
+      rates[sys_id]["short_name"] = sys_name;
+      rates[sys_id]["decode_rate"] = round_to_str(stat_node.get<double>("decoderate"));
+      rates[sys_id]["freq"] = freq_to_str(system->get_current_control_channel());
+      rates[sys_id]["rate_interval"] = round_to_str(timeDiff);
+      rates[sys_id]["rate_history"] = round_to_str(timeDiff * rate_history[sys_id].size());
+
+      rate_history[sys_id].push_back(stat_node.get<double>("decoderate"));
+      rate_history[sys_id].pop_front();
+
+      //std::vector<int> averages;
+      std::string a_graph;
+
+      for (size_t i = 0; i < rate_history[sys_id].size(); i += 5)
+      {
+        double sum = 0;
+        int count = 0;
+        for (size_t j = i; j < i + 5 && j < rate_history[sys_id].size(); ++j)
+        {
+          if (rate_history[sys_id][j] >= 0)
+          {
+            sum += rate_history[sys_id][j];
+            count++;
+          }
+        }
+        // Avoid dividing by zero
+        double average = (sum / std::max(count, 1));
+        // averages.push_back(std::min(int(std::round(average / 5)), 8));
+        // a_graph += graph_blocks[averages.back()];
+        a_graph += graph_blocks[std::min(int(std::round(average / 5)), 8)];
+      }
+      rates[sys_id]["rate_graph"] = a_graph;
+    }
+  }
+  last_rates = rates;
+  return 0;
+}
+
+int Discord_Bot::call_start(Call *call)
 {
-  std::vector<Webhook> system_webhooks;
-  std::vector<Webhook> status_webhooks;
-  std::string log_prefix;
-  // std::map<std::string, RateBucket> rate_buckets;
+  boost::property_tree::ptree stat_node = call->get_stats();
+  call_count = stat_node.get<int>("callNum");
+  tx_count++;
 
-public:
-  // ********************************
-  // trunk-recorder webhook messages
-  // ********************************
+  return 0;
+}
 
-  // system_rates()
-  //   Send control channel messages per second updates; rounded to two decimal places
-  int system_rates(std::vector<System *> systems, float timeDiff) override
+// ********************************
+// Helper functions
+// ********************************
+
+// round_to_str()
+//   Round a float to two decimal places and return it as as string.
+//   "position", "length", and "duration" are the usual offenders.
+std::string Discord_Bot::round_to_str(double num)
+{
+  char rounded[20];
+  snprintf(rounded, sizeof(rounded), "%.2f", num);
+  return std::string(rounded);
+}
+
+double Discord_Bot::round_to_two(double num)
+{
+  std::stringstream stream;
+  double rounded_value;
+
+  stream << std::fixed << std::setprecision(2) << num;
+  stream >> rounded_value;
+  return rounded_value;
+}
+
+// epoch_to_iso()
+//   Convert an epoch timestamp from t-r to ISO format for Discord
+std::string Discord_Bot::epoch_to_iso(int epoch)
+{
+  std::time_t epoch_time = epoch;
+  boost::posix_time::ptime time = boost::posix_time::from_time_t(epoch_time);
+
+  return boost::posix_time::to_iso_string(time);
+}
+
+// freq_to_str()
+//   Convert a freq to MHz string
+std::string Discord_Bot::freq_to_str(double num)
+{
+  std::string freq = (boost::format("%10.6f MHz") % (num / 1000000.0)).str();
+  return freq;
+}
+
+// ********************************
+// trunk-recorder plugin API & startup
+// ********************************
+
+// init()
+//   TRUNK-RECORDER PLUGIN API: Plugin initialization; called after parse_config().
+int Discord_Bot::init(Config *config, std::vector<Source *> sources, std::vector<System *> systems)
+{
+  // Establish pointers to systems, sources, and configs if needed later.
+  tr_sources = sources;
+  tr_systems = systems;
+  tr_config = config;
+
+  // Count number of recorders
+  for (std::vector<Source *>::iterator it = tr_sources.begin(); it != tr_sources.end(); ++it)
   {
-    for (std::vector<Webhook>::iterator it = status_webhooks.begin(); it != status_webhooks.end(); ++it)
-    {
-      if (it->event == "rate")
-      {
-        Webhook *hook = &(*it);
+  int count = (*it)->get_recorders().size(); 
+    recorder_count += count;
+  };
+  
+  return 0;
+}
 
-        bool execute_hook = false;
-        boost::property_tree::ptree field, fields_array;
+// parse_config()
+//   TRUNK-RECORDER PLUGIN API: Called before init(); parses the config information for this plugin.
+// int parse_config(boost::property_tree::ptree &cfg)
+int Discord_Bot::parse_config(nlohmann::json cfg)
+{
+  int default_color = 0xff0000; // red
+  this->log_prefix = "\t[Discord Bot]\t";
+  this->api_key = cfg["apiKey"];
 
-        for (std::vector<System *>::iterator it = systems.begin(); it != systems.end(); ++it)
-        {
-          System *system = *it;
-          std::string sys_name = system->get_short_name();
+  this->log_prefix = "[Discord Bot]\t";
 
-          if ((hook->selector == sys_name) || (hook->selector.empty()))
-          {
-            execute_hook = true;
-            std::string sys_type = system->get_system_type();
+  tx_count = 0;
+  call_count = 0;
+  recorder_count = 0;
+  return 0;
+}
 
-            // Filter out conventional systems.  They do not have a call rate and
-            // get_current_control_channel() will cause a sefgault on non-trunked systems.
-            if (sys_type.find("conventional") == std::string::npos)
-            {
-              boost::property_tree::ptree stat_node = system->get_stats_current(timeDiff);
+int Discord_Bot::start()
+{
+  start_bot(this->api_key);
+  return 0;
+}
 
-              field.put("name", stat_node.get<std::string>("id") + ". " + sys_name);
-              field.put("value", round_to_str(stat_node.get<double>("decoderate")) + "\n`" + freq_to_str(system->get_current_control_channel()) + "`");
-              field.put("inline", "true");
-              fields_array.push_back(make_pair("", field));
-              field.clear();
-            }
-          }
-        }
+int Discord_Bot::stop()
+{
+  stop_bot();
+  return 0;
+}
 
-        if (execute_hook)
-        {
-          boost::property_tree::ptree webhook_data;
-          boost::property_tree::ptree embed, embeds_array;
+void Discord_Bot::start_bot(std::string token)
+{
+  // Define slash commands
+  slash_commands = {
+      {"ping", {"A ping command", [this](dpp::cluster &bot, const dpp::slashcommand_t &command)
+                {
+                  this->slash_ping(bot, command);
+                }}},
+      {"helpy", {"A help command", [this](dpp::cluster &bot, const dpp::slashcommand_t &command)
+                 {
+                   this->slash_help(bot, command);
+                 },
+                 {
+                     dpp::command_option(dpp::co_string, "term", "Help term", false),
+                     dpp::command_option(dpp::co_string, "blerp", "Blerp term", false),
+                 }}},
+      {"info", {"An info command", [this](dpp::cluster &bot, const dpp::slashcommand_t &command)
+                {
+                  this->slash_info(bot, command);
+                }}},
+      {"rates", {"System decode rates", [this](dpp::cluster &bot, const dpp::slashcommand_t &command)
+                 {
+                   this->slash_rates(bot, command);
+                 },
+                 {
+                     dpp::command_option(dpp::co_string, "shortname", "System `shortName`", false),
+                 }}},
+      {"tg", {"System talkgroups", [this](dpp::cluster &bot, const dpp::slashcommand_t &command)
+              {
+                this->slash_tg(bot, command);
+              },
+              {
+                  dpp::command_option(dpp::co_string, "shortname", "System `shortName`", false),
+              }}},
+  };
 
-          std::string author_name = "Message Decode Rates";
-          std::string footer_text = round_to_str(timeDiff) + "s avg.";
+  // Create the bot
+  bot = new dpp::cluster(token);
 
-          webhook_data.put("content", hook->content);
-          webhook_data.put("username", hook->username);
-          webhook_data.put("avatar_url", hook->avatar_url);
+  // Set actions on bot log
+  bot->on_log([this](const dpp::log_t &log)
+              {
+                // Log most bot messages to the info level, critical and errors to the error level
+                switch (log.severity) {
+                  case dpp::loglevel::ll_trace: BOOST_LOG_TRIVIAL(info) << log_prefix << log.message; break;
+                  case dpp::loglevel::ll_debug: BOOST_LOG_TRIVIAL(info) << log_prefix << log.message; break;
+                  case dpp::loglevel::ll_info: BOOST_LOG_TRIVIAL(info) << log_prefix << log.message; break;
+                  case dpp::loglevel::ll_warning: BOOST_LOG_TRIVIAL(info) << log_prefix << log.message; break;
+                  case dpp::loglevel::ll_error: BOOST_LOG_TRIVIAL(error) << log_prefix << log.message; break;
+                  case dpp::loglevel::ll_critical: BOOST_LOG_TRIVIAL(error) << log_prefix << log.message; break;
+                } });
 
-          embed.put("color", hook->color);
-          embed.put("type", "rich");
-          embed.put("description", hook->message);
-          embed.put("author.name", author_name);
-          embed.put("author.icon_url", hook->avatar_url);
-          embed.put("footer.text", footer_text);
-          embed.put("timestamp", epoch_to_iso(time(NULL)));
+  // Set actions on bot ready
+  bot->on_ready([this](const dpp::ready_t &event)
+                {
+                  bot->set_presence(dpp::presence(dpp::presence_status::ps_online, dpp::activity_type::at_watching, "the airwaves"));
+                  BOOST_LOG_TRIVIAL(info) << log_prefix << "Logged in as: \033[0;35m" << bot->me.username << "#" << bot->me.discriminator << "\033[0m (" << bot->me.id << ")";
+                  BOOST_LOG_TRIVIAL(info) << log_prefix << "Invite link: \033[0;36m" << dpp::utility::bot_invite_url(bot->me.id, 380175109184, {"bot", "applications.commands"}) << "\033[0m";
 
-          embed.add_child("fields", fields_array);
-          embeds_array.push_back(make_pair("", embed));
-          webhook_data.add_child("embeds", embeds_array);
+                  // if (dpp::run_once<struct clear_bot_commands>()) {
+                  //     bot->global_bulk_command_delete();
+                  // }
 
-          execute_webhook(webhook_data, hook);
-        }
-      }
-    }
-    return 0;
-  }
+                  if (dpp::run_once<struct bulk_register>())
+                  {
+                    std::vector<dpp::slashcommand> ready_slash_commands;
+                    // Get the defined slash commands
+                    for (auto &cmd : slash_commands)
+                    {
+                      // Create the slash command
+                      dpp::slashcommand slash_command;
+                      slash_command.set_name(cmd.first).set_description(cmd.second.description).set_application_id(bot->me.id);
+                      slash_command.options = cmd.second.parameters;
+                      ready_slash_commands.push_back(slash_command);
+                      BOOST_LOG_TRIVIAL(info) << log_prefix << "  Registering command: /" << cmd.first;
+                    }
+                    // Register the slash commands
+                    bot->global_bulk_command_create(ready_slash_commands);
+                  } });
 
-  // call_end()
-  //   Send information about a completed call and participating (trunked/conventional) units.
-  //   TRUNK-RECORDER PLUGIN API: Called after a call ends
-  int call_end(Call_Data_t call_info)
-  {
-    for (std::vector<Webhook>::iterator it = system_webhooks.begin(); it != system_webhooks.end(); ++it)
-    {
-      Webhook *hook = &(*it);
-      if ((hook->selector == call_info.short_name) || (hook->selector.empty()))
-      {
-        std::string sources;
-        BOOST_FOREACH (auto &unit, call_info.transmission_source_list)
-        {
-          if (!sources.empty())
-            sources += ", ";
-          sources += "`" + std::to_string(unit.source) + "`";
-          if (!unit.tag.empty())
-            sources += " " + unit.tag;
-        }
+  // Set functions to run on slash command
+  bot->on_slashcommand([this](const dpp::slashcommand_t &event)
+                       {
+                         // Get the slash command
+                         dpp::command_interaction cmd_data = event.command.get_command_interaction();
+                         // Verify that the command exists
+                         auto cmd = slash_commands.find(cmd_data.name);
+                         if (cmd != slash_commands.end())
+                         {
+                           // Execute the command
+                           cmd->second.function(*bot, event);
+                         } });
 
-        boost::property_tree::ptree webhook_data;
-        boost::property_tree::ptree embed, embeds_array;
-        boost::property_tree::ptree field, fields_array;
-        std::string author_name = "[" + std::to_string(call_info.talkgroup) + "] " + call_info.talkgroup_alpha_tag;
-        std::string footer_text = call_info.short_name + " - " + freq_to_str(call_info.freq) + ", " + call_info.audio_type;
+  // Start the bot
+  bot->start(dpp::st_return);
+}
 
-        webhook_data.put("content", hook->content);
-        webhook_data.put("username", hook->username);
-        webhook_data.put("avatar_url", hook->avatar_url);
+void Discord_Bot::stop_bot()
+{
+  // Stop the bot
+  bot->set_presence(dpp::presence(dpp::presence_status::ps_dnd, dpp::activity_type::at_watching, "the airwaves"));
+  BOOST_LOG_TRIVIAL(info) << log_prefix << "Stopping bot";
+  delete bot;
+}
 
-        embed.put("color", hook->color);
-        embed.put("type", "rich");
-        embed.put("description", hook->message);
-        embed.put("author.name", author_name);
-        embed.put("author.icon_url", hook->avatar_url);
-        embed.put("footer.text", footer_text);
-        embed.put("timestamp", epoch_to_iso(call_info.start_time));
+// ********************************
+// Create the plugin
+// ********************************
 
-        field.put("name", "Length");
-        field.put("value", round_to_str(call_info.length) + "s");
-        field.put("inline", "true");
-        fields_array.push_back(make_pair("", field));
-        field.clear();
-
-        field.put("name", "Units");
-        field.put("value", sources);
-        field.put("inline", "true");
-        fields_array.push_back(make_pair("", field));
-        field.clear();
-
-        embed.add_child("fields", fields_array);
-        embeds_array.push_back(make_pair("", embed));
-        webhook_data.add_child("embeds", embeds_array);
-
-        execute_webhook(webhook_data, hook);
-      }
-    }
-    return 0;
-  }
-
-  // ********************************
-  // Helper functions
-  // ********************************
-
-  // round_to_str()
-  //   Round a float to two decimal places and return it as as string.
-  //   "position", "length", and "duration" are the usual offenders.
-  std::string round_to_str(double num)
-  {
-    char rounded[20];
-    snprintf(rounded, sizeof(rounded), "%.2f", num);
-    return std::string(rounded);
-  }
-
-  // epoch_to_iso()
-  //   Convert an epoch timestamp from t-r to ISO format for Discord
-  std::string epoch_to_iso(int epoch)
-  {
-    std::time_t epoch_time = epoch;
-    boost::posix_time::ptime time = boost::posix_time::from_time_t(epoch_time);
-
-    return boost::posix_time::to_iso_string(time);
-  }
-
-  // freq_to_str()
-  //   Convert a freq to MHz string
-  std::string freq_to_str(double num)
-  {
-    std::string freq = (boost::format("%10.6f MHz") % (num / 1000000.0)).str();
-    return freq;
-  }
-
-  // ********************************
-  // trunk-recorder plugin API & startup
-  // ********************************
-
-  // parse_config()
-  //   TRUNK-RECORDER PLUGIN API: Called before init(); parses the config information for this plugin.
-  //int parse_config(boost::property_tree::ptree &cfg)
-  int parse_config(nlohmann::json cfg) override
-  {
-    boost::regex url_regex("(https://discord.com/api/webhooks/[0-9]*)/(.*)?");
-    boost::cmatch match;
-
-    std::string default_username = "Trunk Recorder";
-    std::string default_avatar_url = "https://cdn.discordapp.com/icons/928800455444791306/78e52a70389e4a5589b6d22001ccce45.png";
-    int default_color = 0xff0000; // red
-    int hook_count = 0;
-    this->log_prefix = "\t[Discord Hook]\t";
-    
-    // Get the configured systems and webhook URLs
-    // BOOST_FOREACH (boost::property_tree::ptree::value_type &node, cfg.get_child("webhooks"))
-    // BOOST_FOREACH (auto &node, cfg.value("webhooks",""))
-    for (auto &node : cfg["webhooks"])
-    {
-      //bool enabled = node.value("enabled", true);
-      // boost::optional<boost::property_tree::ptree &> webhook_entry = node.second.get_child_optional("event");
-      //nlohmann::json webhook_entry = node.second.get_child_optional("event");
-
-      // if ((node["event"] =! "") && (node["enabled"]))
-      if (node.value("enabled", true))
-      {
-        Webhook hook;
-        hook_count += 1;
-
-        hook.event = node.value<std::string>("event", "");
-        hook.selector = node.value<std::string>("selector", "");
-        hook.webhook_url = node.value<std::string>("webhook", "");
-        hook.description = node.value<std::string>("description", "");
-        hook.username = node.value<std::string>("username", default_username);
-        hook.avatar_url = node.value<std::string>("avatar", default_avatar_url);
-        hook.color = node.value<int>("color", default_color);
-        hook.message = node.value<std::string>("message", "");
-        hook.content = node.value<std::string>("content", "");
-
-        if (regex_match(hook.webhook_url.c_str(), match, url_regex))
-        {
-          std::string redacted_url(match[1].first, match[1].second);
-          BOOST_LOG_TRIVIAL(info) << log_prefix << std::to_string(hook_count) << ": " << hook.description;
-          BOOST_LOG_TRIVIAL(info) << log_prefix << "   Event:  " << hook.event << " = " << (hook.selector.empty() ? "(any)" : hook.selector);
-          BOOST_LOG_TRIVIAL(info) << log_prefix << "   URL:    " << redacted_url << "/******";
-
-          if (hook.event == "call")
-          {
-            this->system_webhooks.push_back(hook);
-          }
-          else if (hook.event == "rate")
-          {
-            this->status_webhooks.push_back(hook);
-          }
-        }
-        else
-        {
-          BOOST_LOG_TRIVIAL(error) << log_prefix << "Unable to parse Discord webhook URL for: (" << hook.event << " = " << (hook.selector.empty() ? "(any)" : hook.selector) << ")";
-        }
-      }
-    }
-
-    if (this->system_webhooks.size() + this->status_webhooks.size() == 0)
-    {
-      BOOST_LOG_TRIVIAL(error) << log_prefix << "Discord Webhook Plugin loaded, but no webhooks are configured.";
-      return 1;
-    }
-
-    this->log_prefix = "[Discord Hook]\t";
-    return 0;
-  }
-
-  // ********************************
-  // Curl webhook execution
-  // ********************************
-
-  int execute_webhook(boost::property_tree::ptree webhook_data, Webhook *hook)
-  {
-    dpp::cluster bot("");
-    bot.on_log(dpp::utility::cout_logger());
- 
-    /* Construct a webhook object using the URL you got from Discord */
-    dpp::webhook wh(hook->webhook_url);
- 
-    /* Send a message with this webhook */
-    bot.execute_webhook_sync(wh, dpp::message("Have a great time here :smile:"));
-
-    // https://autocode.com/tools/discord/embed-builder/
-    // https://discord.com/developers/docs/resources/webhook#execute-webhook
-    // https://birdie0.github.io/discord-webhooks-guide/discord_webhook.html
-
-    // Discord Embeds require json arrays, see below for boost workarounds:
-    // https://www.theunterminatedstring.com/boost-ptree-array/
-
-    std::string webhook_url = hook->webhook_url;
-    std::stringstream webhook_json;
-    boost::property_tree::write_json(webhook_json, webhook_data);
-
-    CURL *curl = nullptr;
-    struct curl_slist *header_list = nullptr;
-
-    BOOST_LOG_TRIVIAL(debug) << log_prefix << "JSON: " << webhook_json.str();
-
-    std::string webhook_str = webhook_json.str();
-
-    curl = curl_easy_init();
-    if (curl != nullptr)
-    {
-      long curl_response;
-      boost::property_tree::ptree headers;
-
-      // Build the curl request
-      header_list = curl_slist_append(header_list, "Content-Type: application/json");
-      header_list = curl_slist_append(header_list, "charsets: utf-8");
-      curl_easy_setopt(curl, CURLOPT_URL, webhook_url.c_str());
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, webhook_str.size());
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, webhook_str.c_str());
-      curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-      curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
-
-      CURLcode curl_ret = curl_easy_perform(curl);
-
-      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &curl_response);
-      BOOST_LOG_TRIVIAL(debug) << log_prefix << "curl: " << curl_response << " " << curl_easy_strerror(curl_ret);
-
-      // for (const auto &header : headers)
-      // {
-      //   std::cout << header.first << ": " << header.second.get_value<std::string>() << std::endl;
-      // }
-      // BOOST_LOG_TRIVIAL(debug) << log_prefix << "time " << time(NULL) << " time";
-
-      // hook->rate_bucket = headers["x-ratelimit-bucket"];
-
-      // this->rate_buckets[hook->rate_bucket].bucket = hook->rate_bucket;
-
-      curl_easy_cleanup(curl);
-      curl_global_cleanup();
-    }
-
-    return 0;
-  }
-
-  // Curl callback function to get Discord ratelimit headers
-  static size_t header_callback(void *contents, size_t size, size_t nmemb, boost::property_tree::ptree *headers)
-  {
-    size_t totalSize = size * nmemb;
-    std::string header(static_cast<char *>(contents), totalSize);
-
-    // Find headers beginning with "x-ratelimit-"
-    const std::string headerPrefix = "x-ratelimit-";
-    const boost::regex pattern("^(\\S+):\\s*(\\S+)\\s*");
-    boost::smatch match;
-
-    if (header.compare(0, headerPrefix.length(), headerPrefix) == 0)
-    {
-      if (boost::regex_match(header, match, pattern))
-      {
-        headers->put(match[1].str(), match[2].str());
-      }
-    }
-    return totalSize;
-  }
-
-  // ********************************
-  // Create the plugin
-  // ********************************
-
-  // Factory method
-  static boost::shared_ptr<Discord_Webhook> create()
-  {
-    return boost::shared_ptr<Discord_Webhook>(new Discord_Webhook());
-  }
+// Factory method
+boost::shared_ptr<Discord_Bot> Discord_Bot::create()
+{
+  return boost::shared_ptr<Discord_Bot>(new Discord_Bot());
 };
 
 BOOST_DLL_ALIAS(
-    Discord_Webhook::create, // <-- this function is exported with...
-    create_plugin            // <-- ...this alias name
+    Discord_Bot::create, // <-- this function is exported with...
+    create_plugin        // <-- ...this alias name
 )
