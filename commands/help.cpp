@@ -1,6 +1,8 @@
 #include "../discord_webhook_plugin.h"
 
 void Discord_Bot::slash_help(dpp::cluster& bot, const dpp::slashcommand_t& event) {
+	BOOST_LOG_TRIVIAL(info) << log_prefix << "/help - Requested by " << event.command.usr.username;
+
 	auto parameter = event.get_parameter("term");
 
 	/* Check to see if the parameter is provided by the user */
@@ -9,10 +11,8 @@ void Discord_Bot::slash_help(dpp::cluster& bot, const dpp::slashcommand_t& event
 		/* If it is, get it and check what's in it */
 		std::string search_term = std::get<std::string>(parameter);
 		if (search_term == "ping") {
-			/* Some reply to help for PING */
 			event.reply("This help left useless as an exercise for the developer.");
 		} else {
-			/* Anything, something, so long as the bot replies. */
 			event.reply("This message intentionally left blank. 🤪");
 		}
 	}
@@ -30,9 +30,4 @@ void Discord_Bot::slash_help(dpp::cluster& bot, const dpp::slashcommand_t& event
 			add_field("/tg", "System talkgroups")
 		)
 	);
-
-	BOOST_LOG_TRIVIAL(info) << log_prefix << "Help!";
 }
-
-
-		// .set_text("Requested by " + event.command.usr.username);

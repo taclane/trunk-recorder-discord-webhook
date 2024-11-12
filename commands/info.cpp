@@ -3,7 +3,6 @@
 
 void Discord_Bot::slash_info(dpp::cluster& bot, const dpp::slashcommand_t& event) 
 {
-	// Info reply
 	BOOST_LOG_TRIVIAL(info) << log_prefix << "/info - Requested by " << event.command.usr.username;
 	event.reply(
 		dpp::message().add_embed(

@@ -90,6 +90,7 @@ public:
     void slash_help(dpp::cluster &bot, const dpp::slashcommand_t &event);
     void slash_info(dpp::cluster &bot, const dpp::slashcommand_t &event);
     void slash_rates(dpp::cluster &bot, const dpp::slashcommand_t &event);
+    void slash_rates_tr(std::vector<System *> systems, float timeDiff);
     void slash_tg(dpp::cluster &bot, const dpp::slashcommand_t &event);
 
     dpp::message get_rate_message(std::string system);
