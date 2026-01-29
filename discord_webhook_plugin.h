@@ -5,12 +5,12 @@
 #include <vector>
 #include <map>
 
-#include <trunk-recorder/plugin_manager/plugin_api.h>
-#include <trunk-recorder/json.hpp>
+// Trunk-Recorder headers - use quotes for local project headers
+#include "../../trunk-recorder/plugin_manager/plugin_api.h"
+#include "../../lib/json.hpp"
+#include "../../trunk-recorder/source.h"
 
-#include <trunk-recorder/source.h>
-
-
+// System/library headers - use angle brackets
 #include <boost/dll/alias.hpp> // for BOOST_DLL_ALIAS
 #include <boost/foreach.hpp>
 #include <boost/algorithm/string.hpp>
@@ -75,6 +75,7 @@ public:
     int parse_config(nlohmann::json cfg) override;
     int system_rates(std::vector<System *> systems, float timeDiff) override;
     int call_start(Call *call) override;
+    int calls_active(std::vector<Call *> calls) override;
     int start() override;
     int stop() override;
     
@@ -92,6 +93,7 @@ public:
     void slash_rates(dpp::cluster &bot, const dpp::slashcommand_t &event);
     void slash_rates_tr(std::vector<System *> systems, float timeDiff);
     void slash_tg(dpp::cluster &bot, const dpp::slashcommand_t &event);
+    void slash_active(dpp::cluster &bot, const dpp::slashcommand_t &event);
 
     dpp::message get_rate_message(std::string system);
 

@@ -26,6 +26,12 @@ int Discord_Bot::call_start(Call *call) {
   return 0;
 }
 
+int Discord_Bot::calls_active(std::vector<Call *> calls) {
+  // Update our list of active calls
+  tr_calls = calls;
+  return 0;
+}
+
 // ********************************
 // Helper functions
 // ********************************
@@ -147,6 +153,12 @@ void Discord_Bot::start_bot(std::string token) {
               {
                   dpp::command_option(dpp::co_string, "shortname", "System `shortName`", false),
               }}},
+      {"active", {"Show active calls", [this](dpp::cluster &bot, const dpp::slashcommand_t &command) {
+                    this->slash_active(bot, command);
+                  },
+                  {
+                      dpp::command_option(dpp::co_string, "shortname", "Filter by system `shortName`", false),
+                  }}},
   };
 
   // Create the bot
@@ -156,12 +168,12 @@ void Discord_Bot::start_bot(std::string token) {
   bot->on_log([this](const dpp::log_t &log) {
     // Log most bot messages to the info level, critical and errors to the error level
     switch (log.severity) {
-      case dpp::loglevel::ll_trace: BOOST_LOG_TRIVIAL(debug) << log_prefix << "trace: " << log.message; break;
-      case dpp::loglevel::ll_debug: BOOST_LOG_TRIVIAL(info) << log_prefix << "debug: " << log.message; break;
-      case dpp::loglevel::ll_info: BOOST_LOG_TRIVIAL(info) << log_prefix << "info:  " << log.message; break;
-      case dpp::loglevel::ll_warning: BOOST_LOG_TRIVIAL(info) << log_prefix << "warn:  " << log.message; break;
-      case dpp::loglevel::ll_error: BOOST_LOG_TRIVIAL(error) << log_prefix << "error: " << log.message; break;
-      case dpp::loglevel::ll_critical: BOOST_LOG_TRIVIAL(error) << log_prefix << "crit:  " << log.message; break;
+      case dpp::loglevel::ll_trace: BOOST_LOG_TRIVIAL(debug) << log_prefix << log.message; break;
+      case dpp::loglevel::ll_debug: BOOST_LOG_TRIVIAL(info) << log_prefix << log.message; break;
+      case dpp::loglevel::ll_info: BOOST_LOG_TRIVIAL(info) << log_prefix << log.message; break;
+      case dpp::loglevel::ll_warning: BOOST_LOG_TRIVIAL(warning) << log_prefix << log.message; break;
+      case dpp::loglevel::ll_error: BOOST_LOG_TRIVIAL(error) << log_prefix << log.message; break;
+      case dpp::loglevel::ll_critical: BOOST_LOG_TRIVIAL(error) << log_prefix << log.message; break;
     } });
 
   // Set actions on bot ready

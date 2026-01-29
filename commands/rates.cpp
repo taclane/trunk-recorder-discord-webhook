@@ -20,14 +20,13 @@ void Discord_Bot::slash_rates_tr(std::vector<System *> systems, float timeDiff) 
     std::string sys_type = system->get_system_type();
     std::string sys_id = std::to_string(system->get_sys_num());
 
-    int sample_size = 5;
+    int sample_size = 5; // 5 3sec samples averaged per graph item
 
     // Filter out conventional systems.  They do not have a call rate and
     // get_current_control_channel() will cause a sefgault on non-trunked systems.
     if (sys_type.find("conventional") == std::string::npos) {
       // Initialize a system history with null entries
       if (rate_history.find(sys_id) == rate_history.end()) {
-        // rate_history[sys_id] = std::deque<double>(65, -1); //  13 15-second avgs
         rate_history[sys_id] = std::deque<double>(120, -1); // 12 15-second avgs
       }
 
@@ -42,13 +41,10 @@ void Discord_Bot::slash_rates_tr(std::vector<System *> systems, float timeDiff) 
       rate_history[sys_id].push_back(stat_node.get<double>("decoderate"));
       rate_history[sys_id].pop_front();
 
-      // std::vector<int> averages;
-      // std::string a_graph;
-
-      std::string t_graph;
-      std::string b_graph;
+      std::pair<std::string, std::string> graph;
 
       for (size_t i = 0; i < rate_history[sys_id].size(); i += (2 * sample_size)) {
+        // Build the graph (left braille)
         double sum = 0;
         int count = 0;
 
@@ -58,13 +54,13 @@ void Discord_Bot::slash_rates_tr(std::vector<System *> systems, float timeDiff) 
             count++;
           }
         }
-        // Avoid dividing by zero
-        double average_l = (sum / std::max(count, 1));
+        double average_l = (sum / std::max(count, 1)); // Avoid dividing by zero
 
         std::vector<int> block_l = {
             std::max(std::min(int(std::round(average_l / 5)), 8) - 4, 0),
             std::min(int(std::round(average_l / 5)), 4)};
 
+        // Build the graph (right braille)
         sum = 0;
         count = 0;
 
@@ -74,29 +70,18 @@ void Discord_Bot::slash_rates_tr(std::vector<System *> systems, float timeDiff) 
             count++;
           }
         }
-        // Avoid dividing by zero
-        double average_r = (sum / std::max(count, 1));
+        double average_r = (sum / std::max(count, 1)); // Avoid dividing by zero
 
         std::vector<int> block_r = {
             std::max(std::min(int(std::round(average_r / 5)), 8) - 4, 0),
             std::min(int(std::round(average_r / 5)), 4)};
 
-        // averages.push_back(std::min(int(std::round(average / 5)), 8));
-        // a_graph += graph_blocks[averages.back()];
-        // a_graph += graph_blocks[std::min(int(std::round(average / 5)), 8)];
-
-        // t_graph += braille_blocks[std::max(std::min(int(std::round(average / 5)), 8) - 4, 0)];
-        // b_graph += braille_blocks[std::min(int(std::round(average / 5)), 4)];
-
-        // BOOST_LOG_TRIVIAL(info) << log_prefix << "/rates - " << block_l[0] << " " << block_l[1] << " " << block_r[0] << " " << block_r[1];
-
-        t_graph += braille_blocks[block_l[0] * 5 + block_r[0]];
-        b_graph += braille_blocks[block_l[1] * 5 + block_r[1]];
+        graph.first += braille_blocks[block_l[0] * 5 + block_r[0]];
+        graph.second += braille_blocks[block_l[1] * 5 + block_r[1]];
       }
 
-      //   rates[sys_id]["rate_graph"] = a_graph;
-      rates[sys_id]["t_graph"] = t_graph;
-      rates[sys_id]["b_graph"] = b_graph;
+      rates[sys_id]["t_graph"] = graph.first;
+      rates[sys_id]["b_graph"] = graph.second;
     }
   }
   last_rates = rates;
@@ -131,7 +116,6 @@ dpp::message Discord_Bot::get_rate_message(std::string system) {
     if ((std::string(val["short_name"]) == system) || (system == "")) {
       rates_found = true;
       std::string field_title = key + ". " + std::string(val["short_name"]);
-      // std::string field_msg = std::string(val["decode_rate"]) + " msg/s\n```" + std::string(val["freq"]) + "\n" + std::string(val["rate_graph"]) + "```";
       std::string field_msg = std::string(val["decode_rate"]) + " msg/s\n```" + std::string(val["freq"]) + "\n" + std::string(val["t_graph"]) + "\n" + std::string(val["b_graph"]) + "```";
 
       rate_embed
